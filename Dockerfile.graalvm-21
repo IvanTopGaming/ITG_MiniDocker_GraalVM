@@ -1,0 +1,54 @@
+# ===== 1. Bootstrap: Install dependencies and OpenJDK =====
+FROM debian:bookworm-slim AS builder
+
+WORKDIR /graalvm
+
+# Install dependencies
+RUN apt-get update \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+	   build-essential python3 zlib1g-dev libssl-dev libffi-dev libncurses5-dev libsqlite3-dev \
+	   libreadline-dev libbz2-dev liblzma-dev libgdbm-dev libnss3-dev wget curl llvm git \
+	   unzip xz-utils tk-dev ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
+# Download and extract Labs-OpenJDK 21 for GraalVM build
+RUN wget https://github.com/graalvm/labs-openjdk-21/releases/download/jvmci-23.1-b33/labsjdk-ce-21.0.2+13-jvmci-23.1-b33-linux-amd64.tar.gz \
+	&& tar -zxf labsjdk-ce-21.0.2+13-jvmci-23.1-b33-linux-amd64.tar.gz \
+	&& rm labsjdk-ce-21.0.2+13-jvmci-23.1-b33-linux-amd64.tar.gz
+
+# Set JAVA_HOME
+ENV JAVA_HOME=/graalvm/labsjdk-ce-21.0.2-jvmci-23.1-b33
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# ===== 2. Clone and build GraalVM CE =====
+WORKDIR /graalvm
+# Clone tools and sources
+RUN git clone --branch vm-ce-21.3.6 --depth 1 https://github.com/oracle/graal.git \
+	&& git clone --branch 6.18.2 --depth 1 https://github.com/graalvm/mx.git
+
+# Build GraalVM
+COPY ce /graalvm/graal/vm/mx.vm/ce
+ENV JVMCI_VERSION_CHECK=ignore
+ENV PATH="/graalvm/mx:${PATH}"
+WORKDIR /graalvm/graal/vm
+RUN mx --env ce build
+
+# ===== 3. Extract minimal runtime and clean up =====
+WORKDIR /graalvm
+RUN mkdir -p /opt/graalvm \
+	&& cp -a /graalvm/graal/sdk/mxbuild/linux-amd64/GRAALVM_*/graalvm-*-java*-*/* /opt/graalvm \
+	&& rm -rf /opt/graalvm/lib/src.zip \
+	&& rm -rf /opt/graalvm/lib/security/cacerts.jks \
+	&& rm -rf /opt/graalvm/lib/{tzdb.dat,*.properties}
+#	&& find /opt/graalvm -name '*.so' -exec strip --strip-unneeded {} +
+
+# ===== 4. Final image on scratch =====
+FROM debian:bookworm-slim
+
+# Copy GraalVM
+COPY --from=builder /opt/graalvm /opt/graalvm
+
+ENV JAVA_HOME=/opt/graalvm
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+CMD ["java", "-version"]

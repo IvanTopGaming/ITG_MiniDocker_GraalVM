@@ -1,0 +1,63 @@
+# Stage 1: Build stage
+FROM debian:bookworm-slim AS native_builder
+
+WORKDIR /app
+
+# Install necessary packages
+RUN apt update -y && \
+    apt install -y curl tar xz-utils build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install musl toolchain
+ENV MUSL_HOME=/app/musl-toolchain
+RUN curl -O https://musl.libc.org/releases/musl-1.2.5.tar.gz && \
+    tar -xzf musl-1.2.5.tar.gz && \
+    cd musl-1.2.5 && \
+    ./configure --prefix=$MUSL_HOME --static && \
+    make && make install && \
+    ln -s $MUSL_HOME/bin/musl-gcc $MUSL_HOME/bin/x86_64-linux-musl-gcc && \
+    rm -f musl-1.2.5.tar.gz && \
+    rm -rf musl-1.2.5
+
+ENV PATH=$MUSL_HOME/bin:$PATH
+
+# Install zlib
+RUN curl -O https://zlib.net/fossils/zlib-1.3.1.tar.gz && \
+    tar -xzf zlib-1.3.1.tar.gz && \
+    cd zlib-1.3.1 && \
+    CC=musl-gcc ./configure --prefix=$MUSL_HOME --static && \
+    make && make install && \
+    rm -f zlib-1.3.1.tar.gz && \
+    rm -rf zlib-1.3.1
+
+# Install UPX
+RUN curl -L -o upx.tar.xz https://github.com/upx/upx/releases/download/v5.0.1/upx-5.0.1-amd64_linux.tar.xz && \
+    tar -xf upx.tar.xz && \
+    mv upx-5.0.1-amd64_linux/upx /usr/local/bin/ && \
+    chmod +x /usr/local/bin/upx && \
+    rm -rf upx*
+
+# Install GraalVM
+RUN curl -L -o graalvm.tar.gz https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-24.0.1/graalvm-community-jdk-24.0.1_linux-x64_bin.tar.gz && \
+    tar -xzf graalvm.tar.gz && \
+    mv graalvm-community-openjdk-24.0.1+9.1 /opt/graalvm && \
+    rm graalvm.tar.gz
+
+ENV JAVA_HOME=/opt/graalvm
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# Copy and build the application
+COPY your_app.jar /app/your_app.jar
+
+RUN native-image \
+    --static \
+    --libc=musl \
+    --no-fallback \
+    -jar your_app.jar
+
+RUN strip your_app && upx --best your_app
+
+# Stage 2: Runtime stage
+FROM scratch
+COPY --from=native_builder /app/your_app /app/your_app
+CMD ["/app/your_app"]
