@@ -1,0 +1,36 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  GraalVM-25:
+
+    runs-on: debian-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the GraalVM 25 image
+      run: docker build . --file Dockerfile --tag mini_graalvm:latest
+
+  GraalVM-24:
+
+    runs-on: debian-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the GraalVM 24 image
+      run: docker build . --file Dockerfile.graalvm-24 --tag mini_graalvm:24
+      
+  GraalVM-21:
+
+    runs-on: debian-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build the GraalVM 21 image
+      run: docker build . --file Dockerfile.graalvm-21 --tag mini_graalvm:21
