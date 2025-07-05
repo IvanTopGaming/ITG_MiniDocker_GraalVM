@@ -24,7 +24,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 WORKDIR /graalvm
 # Clone tools and sources
 RUN git clone --branch release/graal-vm/24.2 --depth 1 https://github.com/oracle/graal.git \
-	&& git clone --depth 1 https://github.com/graalvm/mx.git
+	&& git clone --branch release/graal-vm/24.2 --depth 1 https://github.com/graalvm/mx.git
 
 # Build GraalVM
 COPY ce /graalvm/graal/vm/mx.vm/ce
